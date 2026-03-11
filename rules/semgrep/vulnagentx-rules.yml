@@ -1,0 +1,34 @@
+rules:
+  - id: vulnagentx.command-injection.python.subprocess-shell
+    message: Command injection risk: subprocess with shell=True.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: subprocess.$F(..., shell=True, ...)
+
+  - id: vulnagentx.sql-injection.python.concat
+    message: Potential SQL injection from string concatenation.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: $Q = "SELECT ..." + $X
+          - pattern: $Q = "INSERT ..." + $X
+          - pattern: $Q = f"SELECT ...{$X}..."
+
+  - id: vulnagentx.deserialization.pickle-loads
+    message: Untrusted deserialization via pickle.loads.
+    severity: ERROR
+    languages: [python]
+    pattern: pickle.loads($X)
+
+  - id: vulnagentx.unsafe-c-string
+    message: Unsafe C string API usage may cause overflow.
+    severity: ERROR
+    languages: [c, cpp]
+    patterns:
+      - pattern-either:
+          - pattern: strcpy($A, $B)
+          - pattern: strcat($A, $B)
+          - pattern: sprintf($A, ...)
+          - pattern: gets($A)

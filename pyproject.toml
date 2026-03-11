@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vulnagent-x"
+version = "0.1.0"
+description = "VulnAgent-X research prototype for repository-level vulnerability analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "VulnAgent-X Team" }]
+dependencies = [
+  "fastapi>=0.116.0",
+  "httpx>=0.28.0",
+  "pydantic>=2.9.0",
+  "pyyaml>=6.0.2",
+  "typer>=0.12.5",
+  "uvicorn>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.8.0",
+  "mypy>=1.13.0",
+]
+llm = [
+  "openai>=1.50.0",
+]
+analysis = [
+  "tree-sitter>=0.24.0",
+  "tree-sitter-languages>=1.10.2",
+]
+
+[project.scripts]
+vulnagentx = "vulnagentx.app.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vulnagentx"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["vulnagentx"]
