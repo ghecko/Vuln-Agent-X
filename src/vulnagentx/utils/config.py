@@ -4,7 +4,13 @@ import os
 from pathlib import Path
 from typing import Literal, cast
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Load .env file from the project root (or current working directory).
+# This makes VULNAGENTX_* variables available via os.getenv() without
+# requiring the user to export them manually.
+load_dotenv()
 
 
 LLMProvider = Literal["mock", "openai", "ollama"]
