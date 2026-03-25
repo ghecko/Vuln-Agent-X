@@ -1,5 +1,5 @@
 <p align="right">
-  <a href="./README.zh.md"><img src="https://img.shields.io/badge/语言-中文-lightgrey" alt="中文"></a>
+  <a href="./README.zh.md"><img src="https://img.shields.io/badge/Language-Chinese-lightgrey" alt="Chinese"></a>
   <a href="./README.en.md"><img src="https://img.shields.io/badge/Language-English-blue" alt="English"></a>
 </p>
 
@@ -43,7 +43,7 @@ It takes a local repository or diff as input, and outputs structured findings, e
 Requirement: Python `3.11+` (higher versions also work in this prototype).
 
 ```bash
-cd /Users/xiaolu/Documents/Python_code/vulnAgentX
+cd /path/to/vulnAgentX
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
@@ -139,7 +139,7 @@ docker compose -f docker/docker-compose.yml up --build
 |---|---|
 | `.env.example` | Environment template for optional runtime settings (for example log level). |
 | `pyproject.toml` | Build system, dependencies, script entrypoints, pytest/ruff/mypy configuration. |
-| `README.md` | Main README with language switch buttons (default Chinese). |
+| `README.md` | Main README with language switch buttons (default English). |
 | `README.zh.md` | Full Chinese documentation. |
 | `README.en.md` | Full English documentation. |
 | `docker/Dockerfile` | Container image build file for API service. |

@@ -4,7 +4,7 @@ import time
 import uuid
 
 from vulnagentx.adapters.llm.base import LLMAdapter
-from vulnagentx.adapters.llm.factory import build_llm_adapter
+from vulnagentx.adapters.llm.factory import build_agent_llm_adapters, build_llm_adapter
 from vulnagentx.agents.logic_bug_agent import LogicBugAgent
 from vulnagentx.agents.router_agent import RouterAgent
 from vulnagentx.agents.sceptic_agent import ScepticAgent
@@ -22,7 +22,14 @@ from vulnagentx.utils.config import WorkflowConfig
 class VulnAgentWorkflow:
     def __init__(self, llm_adapter: LLMAdapter | None = None, config: WorkflowConfig | None = None) -> None:
         self.config = config or WorkflowConfig.from_env()
-        self.llm_adapter = llm_adapter or build_llm_adapter(self.config)
+        # Build per-agent adapters (respects agent_models overrides).
+        self._agent_adapters = build_agent_llm_adapters(self.config)
+        # Keep a single default for backward compatibility.
+        self.llm_adapter = llm_adapter or self._agent_adapters.get("_default") or build_llm_adapter(self.config)
+
+    def _adapter_for(self, agent_name: str) -> LLMAdapter:
+        """Return the LLM adapter configured for a specific agent."""
+        return self._agent_adapters.get(agent_name, self.llm_adapter)
 
     @staticmethod
     def _loc_key(file_path: str, start_line: int, end_line: int) -> str:
@@ -68,10 +75,18 @@ class VulnAgentWorkflow:
             target_type=inferred_target,
         )
 
+        # Build a readable model assignment map for the log.
+        model_map = {
+            name: self.config.model_for_agent(name)
+            for name in ("semantic_agent", "security_agent", "logic_bug_agent")
+        }
+
         state.add_log(
             stage="workflow",
             message="Workflow started",
             llm_provider=self.config.llm_provider,
+            default_model=self.config.llm_model,
+            agent_models=model_map,
             semgrep_enabled=self.config.use_semgrep,
             treesitter_enabled=self.config.use_treesitter,
             verification_enabled=self.config.enable_verification,
@@ -95,9 +110,9 @@ class VulnAgentWorkflow:
         state.agent_outputs[router.name] = router.run(state)
 
         specialists = [
-            SemanticAgent(llm_adapter=self.llm_adapter),
-            SecurityAgent(llm_adapter=self.llm_adapter),
-            LogicBugAgent(llm_adapter=self.llm_adapter),
+            SemanticAgent(llm_adapter=self._adapter_for("semantic_agent")),
+            SecurityAgent(llm_adapter=self._adapter_for("security_agent")),
+            LogicBugAgent(llm_adapter=self._adapter_for("logic_bug_agent")),
         ]
 
         for agent in specialists:

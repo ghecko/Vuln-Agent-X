@@ -1,18 +1,18 @@
 <p align="right">
-  <a href="./README.zh.md"><img src="https://img.shields.io/badge/语言-中文-blue" alt="中文"></a>
-  <a href="./README.en.md"><img src="https://img.shields.io/badge/Language-English-lightgrey" alt="English"></a>
+  <a href="./README.zh.md"><img src="https://img.shields.io/badge/Language-Chinese-lightgrey" alt="Chinese"></a>
+  <a href="./README.en.md"><img src="https://img.shields.io/badge/Language-English-blue" alt="English"></a>
 </p>
 
-# VulnAgent-X 研究原型
+# VulnAgent-X Research Prototype
 
-VulnAgent-X 是一个面向论文复现的多 Agent 漏洞/缺陷检测原型。
-输入本地仓库或 diff，输出结构化 findings、证据链、定位结果、置信度和实验日志。
+VulnAgent-X is a research-focused multi-agent prototype for bug and vulnerability detection.
+It takes a local repository or diff as input, and outputs structured findings, evidence chains, localization, confidence, and experiment logs.
 
-## 核心能力
+## Core Capabilities
 
-- 输入形式：`repo path` 或 `unified diff`
-- 工作流：`screening -> context expansion -> scheduler -> router -> experts -> sceptic -> verification(stub) -> evidence fusion`
-- 输出字段：
+- Inputs: `repo path` or `unified diff`
+- Workflow: `screening -> context expansion -> scheduler -> router -> experts -> sceptic -> verification(stub) -> evidence fusion`
+- Output fields:
   - `issue_type`
   - `location(file + line range)`
   - `evidence_summary`
@@ -22,68 +22,115 @@ VulnAgent-X 是一个面向论文复现的多 Agent 漏洞/缺陷检测原型。
   - `fix_hint`
   - `evidence_chain`
   - `counter_evidence`
-- 接口：CLI + FastAPI
-- 可复现实验：pytest / mypy / ruff + Docker 运行支持
+- Interfaces: CLI + FastAPI
+- Reproducibility: pytest / mypy / ruff + Docker support
 
-## 工作流概览
+## Workflow Overview
 
-1. `screening`：快速筛查可疑区域（规则 + 元数据信号）
-2. `context_expansion`：拉取“最小充分上下文”（按可疑位置提取窗口）
-3. `scheduler`：根据置信度和风险做升级策略（early_exit / expert_review / verification）
-4. `router_agent`：为每个可疑区域选择专家 Agent
-5. `semantic/security/logic`：从不同视角给出结构化主张和证据
-6. `sceptic_agent`：生成反证与惩罚信号
-7. `verification`：可选动态验证（当前为安全占位实现）
-8. `evidence_fusion`：统一融合并输出最终 findings
+1. `screening`: fast suspicious-region extraction (rules + metadata signals)
+2. `context_expansion`: fetch minimal sufficient local context around suspicious locations
+3. `scheduler`: confidence-aware escalation policy (early_exit / expert_review / verification)
+4. `router_agent`: choose specialist agents per suspicious region
+5. `semantic/security/logic`: produce structured claims and evidence from different perspectives
+6. `sceptic_agent`: generate counter-evidence and confidence penalties
+7. `verification`: optional dynamic verification (currently a safe placeholder)
+8. `evidence_fusion`: merge all evidence and produce final findings
 
-## 安装与运行教程
+## Setup and Usage Tutorial
 
-### 1) 环境准备
+### 1) Environment Setup
 
-要求：Python `3.11+`（当前也可在更高版本运行）
+Requirement: Python `3.11+` (higher versions also work in this prototype).
 
 ```bash
-cd /Users/xiaolu/Documents/Python_code/vulnAgentX
+cd /path/to/vulnAgentX
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 ```
 
-### 2) CLI 使用
+### 2) LLM Configuration
 
-分析整个仓库：
+Copy `.env.example` to `.env` and configure your LLM provider.
+
+**Local LLM with Ollama (recommended):**
+
+```bash
+# Install Ollama: https://ollama.com
+# Pull the models you want to use:
+ollama pull qwen2.5:8b      # lightweight (screening, semantic)
+ollama pull qwen2.5:32b     # heavier (security, logic analysis)
+```
+
+```bash
+# .env
+VULNAGENTX_LLM_PROVIDER=ollama
+VULNAGENTX_LLM_MODEL=qwen2.5:8b                   # default model for all agents
+VULNAGENTX_MODEL_SECURITY_AGENT=qwen2.5:32b        # override: security gets the bigger model
+VULNAGENTX_MODEL_LOGIC_BUG_AGENT=qwen2.5:32b       # override: logic gets the bigger model
+```
+
+Each specialist agent (semantic, security, logic) can be assigned its own model via `VULNAGENTX_MODEL_<AGENT_NAME>`. Agents without an override use `VULNAGENTX_LLM_MODEL` as the fallback.
+
+| Environment Variable | Agent | Suggested Model |
+|---|---|---|
+| `VULNAGENTX_MODEL_SEMANTIC_AGENT` | Semantic Agent | Small/fast (8B) — high volume, pattern-based |
+| `VULNAGENTX_MODEL_SECURITY_AGENT` | Security Agent | Large (32B-70B) — complex vuln reasoning |
+| `VULNAGENTX_MODEL_LOGIC_BUG_AGENT` | Logic Bug Agent | Large (32B-70B) — control-flow analysis |
+
+**OpenAI-compatible server (vLLM, LM Studio, LocalAI, text-generation-webui, etc.):**
+
+```bash
+# .env
+VULNAGENTX_LLM_PROVIDER=openai
+VULNAGENTX_LLM_MODEL=qwen2.5:8b
+VULNAGENTX_LLM_BASE_URL=http://192.168.1.50:8000/v1   # your server's /v1 endpoint
+OPENAI_API_KEY=not-needed                               # any non-empty string if no auth
+```
+
+Use `VULNAGENTX_LLM_PROVIDER=openai` for **any** server that exposes the `/v1/chat/completions` endpoint (this includes most local inference servers). Point `VULNAGENTX_LLM_BASE_URL` to your server. The `ollama` provider is only for Ollama's native `/api/generate` format.
+
+**OpenAI cloud:**
+
+```bash
+VULNAGENTX_LLM_PROVIDER=openai
+VULNAGENTX_LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-...
+```
+
+Analyze a repository:
 
 ```bash
 .venv/bin/vulnagentx analyze --repo /path/to/repo --output json
 ```
 
-分析 diff 文件：
+Analyze a diff file:
 
 ```bash
 .venv/bin/vulnagentx analyze --diff-file /path/to/patch.diff --output json
 ```
 
-简要输出：
+Short summary output:
 
 ```bash
 .venv/bin/vulnagentx analyze --repo /path/to/repo --output summary
 ```
 
-### 3) API 使用
+### 4) API Usage
 
-启动服务：
+Start server:
 
 ```bash
 .venv/bin/uvicorn vulnagentx.app.api:app --reload
 ```
 
-健康检查：
+Health check:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-发起分析：
+Run analysis request:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/analyze \
@@ -91,13 +138,13 @@ curl -X POST http://127.0.0.1:8000/analyze \
   -d '{"repo_path":"/path/to/repo"}'
 ```
 
-### 4) Docker 运行
+### 5) Run with Docker
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-### 5) 质量检查与测试
+### 6) Quality Checks and Tests
 
 ```bash
 .venv/bin/ruff check src tests
@@ -105,7 +152,7 @@ docker compose -f docker/docker-compose.yml up --build
 .venv/bin/pytest
 ```
 
-## 输出示例
+## Output Example
 
 ```json
 {
@@ -131,82 +178,82 @@ docker compose -f docker/docker-compose.yml up --build
 }
 ```
 
-## 文件用途说明（逐文件）
+## File-by-File Purpose
 
-### 根目录与工程文件
+### Root and Infrastructure Files
 
-| 文件 | 用途 |
+| File | Purpose |
 |---|---|
-| `.env.example` | 环境变量模板（日志级别等可选设置）。 |
-| `pyproject.toml` | 项目构建、依赖、脚本入口、pytest/ruff/mypy 配置。 |
-| `README.md` | 主 README（带语言切换按钮，默认中文）。 |
-| `README.zh.md` | 中文完整版文档。 |
-| `README.en.md` | 英文完整版文档。 |
-| `docker/Dockerfile` | API 服务容器镜像构建文件。 |
-| `docker/docker-compose.yml` | 本地一键拉起容器服务。 |
-| `rules/semgrep/vulnagentx-rules.yml` | 内置 Semgrep 规则集（命令注入/SQL 注入/反序列化/不安全 C API）。 |
-| `scripts/run_experiment.py` | 数据集批量实验执行脚本，输出预测 JSONL。 |
-| `scripts/evaluate.py` | 读取实验输出并计算检测/定位/效率指标。 |
-| `scripts/run_ablation.py` | 消融实验脚本（no_semgrep/no_treesitter/no_sceptic/no_verification）。 |
+| `.env.example` | Environment template for optional runtime settings (for example log level). |
+| `pyproject.toml` | Build system, dependencies, script entrypoints, pytest/ruff/mypy configuration. |
+| `README.md` | Main README with language switch buttons (default English). |
+| `README.zh.md` | Full Chinese documentation. |
+| `README.en.md` | Full English documentation. |
+| `docker/Dockerfile` | Container image build file for API service. |
+| `docker/docker-compose.yml` | One-command local container startup. |
+| `rules/semgrep/vulnagentx-rules.yml` | Built-in Semgrep rules for injection/deserialization/unsafe C APIs. |
+| `scripts/run_experiment.py` | Batch dataset runner that writes JSONL predictions. |
+| `scripts/evaluate.py` | Metrics evaluator for experiment outputs. |
+| `scripts/run_ablation.py` | Component ablation runner (`no_semgrep/no_treesitter/no_sceptic/no_verification`). |
 
-### 核心源码（`src/vulnagentx`）
+### Core Source Files (`src/vulnagentx`)
 
-| 文件 | 用途 |
+| File | Purpose |
 |---|---|
-| `src/vulnagentx/__init__.py` | 包版本与包导出定义。 |
-| `src/vulnagentx/app/__init__.py` | `app` 子包初始化。 |
-| `src/vulnagentx/app/cli.py` | CLI 入口（`vulnagentx analyze`）。 |
-| `src/vulnagentx/app/api.py` | FastAPI 服务入口（`/health`、`/analyze`）。 |
-| `src/vulnagentx/app/schemas.py` | API 请求/响应的 Pydantic Schema。 |
-| `src/vulnagentx/core/__init__.py` | `core` 子包初始化。 |
-| `src/vulnagentx/core/state.py` | 全局状态模型：区域、证据、Agent 输出、Finding、日志、指标。 |
-| `src/vulnagentx/core/screening.py` | 第一阶段快速筛查，提取可疑区域。 |
-| `src/vulnagentx/core/context_expansion.py` | 上下文扩展：按定位提取最小代码窗口。 |
-| `src/vulnagentx/core/scheduler.py` | 置信度感知升级策略（early_exit/expert_review/verification）。 |
-| `src/vulnagentx/core/verification.py` | 可选动态验证模块（当前为安全占位版）。 |
-| `src/vulnagentx/core/evidence_fusion.py` | 多 Agent 证据融合，输出最终 findings。 |
-| `src/vulnagentx/core/workflow.py` | 端到端编排入口 `VulnAgentWorkflow`。 |
-| `src/vulnagentx/agents/__init__.py` | Agent 导出聚合。 |
-| `src/vulnagentx/agents/base.py` | Agent 抽象基类与上下文获取工具。 |
-| `src/vulnagentx/agents/router_agent.py` | 路由 Agent：为每个可疑区域分配专家 Agent。 |
-| `src/vulnagentx/agents/semantic_agent.py` | 语义 Agent：语义层风险（如空指针、反序列化、异常吞掉）。 |
-| `src/vulnagentx/agents/security_agent.py` | 安全 Agent：安全漏洞规则（命令注入、SQL 注入、越界等）。 |
-| `src/vulnagentx/agents/logic_bug_agent.py` | 逻辑 Agent：业务/控制流缺陷（边界、除零、授权缺失等）。 |
-| `src/vulnagentx/agents/sceptic_agent.py` | 怀疑者 Agent：生成反证、冲突惩罚、降置信。 |
-| `src/vulnagentx/adapters/__init__.py` | 适配器子包初始化。 |
-| `src/vulnagentx/adapters/sandbox_adapter.py` | 受限子进程沙箱执行器（超时、无 shell）用于 verification。 |
-| `src/vulnagentx/adapters/semgrep_adapter.py` | Semgrep CLI 适配器（可选启用）。 |
-| `src/vulnagentx/adapters/treesitter_adapter.py` | 真实 Tree-sitter 适配器（可用时解析 AST 与调用/导入关系，不可用时降级）。 |
-| `src/vulnagentx/adapters/llm/__init__.py` | LLM 适配器导出聚合。 |
-| `src/vulnagentx/adapters/llm/base.py` | LLM 适配器协议接口。 |
-| `src/vulnagentx/adapters/llm/mock_adapter.py` | 离线可测的 Mock LLM。 |
-| `src/vulnagentx/adapters/llm/openai_adapter.py` | OpenAI 官方 SDK 适配器。 |
-| `src/vulnagentx/adapters/llm/local_adapter.py` | 本地模型适配器（Ollama HTTP API）。 |
-| `src/vulnagentx/adapters/llm/factory.py` | 按配置自动选择 LLM 适配器并兜底到 Mock。 |
-| `src/vulnagentx/retrieval/repo_graph.py` | 代码图索引与邻居文件检索（基于 AST 符号重叠）。 |
-| `src/vulnagentx/datasets/base.py` | 通用数据集样本结构与 JSONL/CSV 读取。 |
-| `src/vulnagentx/datasets/devign.py` | Devign 数据加载入口。 |
-| `src/vulnagentx/datasets/bigvul.py` | Big-Vul 数据加载入口。 |
-| `src/vulnagentx/datasets/primevul.py` | PrimeVul 数据加载入口。 |
-| `src/vulnagentx/datasets/jit.py` | JIT 数据加载入口。 |
-| `src/vulnagentx/eval/detection_metrics.py` | 检测指标（Precision/Recall/F1/Accuracy）。 |
-| `src/vulnagentx/eval/localization_metrics.py` | 定位指标（Top-1/Top-3/MRR）。 |
-| `src/vulnagentx/eval/efficiency_metrics.py` | 效率指标（平均耗时、P95、平均 findings）。 |
-| `src/vulnagentx/eval/ablations.py` | 消融实验执行逻辑。 |
-| `src/vulnagentx/utils/config.py` | 工作流配置中心（env/CLI/API 开关）。 |
+| `src/vulnagentx/__init__.py` | Package version and exports. |
+| `src/vulnagentx/app/__init__.py` | `app` package initializer. |
+| `src/vulnagentx/app/cli.py` | CLI entrypoint (`vulnagentx analyze`). |
+| `src/vulnagentx/app/api.py` | FastAPI entrypoint (`/health`, `/analyze`). |
+| `src/vulnagentx/app/schemas.py` | Pydantic request/response schemas for API. |
+| `src/vulnagentx/core/__init__.py` | `core` package initializer. |
+| `src/vulnagentx/core/state.py` | Global state models: regions, evidence, agent outputs, findings, logs, metrics. |
+| `src/vulnagentx/core/screening.py` | Stage-1 fast risk screening and suspicious region extraction. |
+| `src/vulnagentx/core/context_expansion.py` | Context expansion with bounded local code windows. |
+| `src/vulnagentx/core/scheduler.py` | Confidence-aware escalation policy (early_exit/expert_review/verification). |
+| `src/vulnagentx/core/verification.py` | Optional dynamic verification module (safe placeholder for now). |
+| `src/vulnagentx/core/evidence_fusion.py` | Final evidence fusion and finding ranking. |
+| `src/vulnagentx/core/workflow.py` | End-to-end orchestration entry (`VulnAgentWorkflow`). |
+| `src/vulnagentx/agents/__init__.py` | Agent export aggregator. |
+| `src/vulnagentx/agents/base.py` | Agent abstract base and shared context helper. |
+| `src/vulnagentx/agents/router_agent.py` | Router agent: dispatches specialists by region. |
+| `src/vulnagentx/agents/semantic_agent.py` | Semantic agent: semantic code-risk signals (null deref, deserialization, etc.). |
+| `src/vulnagentx/agents/security_agent.py` | Security agent: vulnerability patterns (command injection, SQLi, overflow, etc.). |
+| `src/vulnagentx/agents/logic_bug_agent.py` | Logic agent: control-flow/business logic defects (bounds, division, authz, etc.). |
+| `src/vulnagentx/agents/sceptic_agent.py` | Sceptic agent: counter-evidence generation and confidence penalty. |
+| `src/vulnagentx/adapters/__init__.py` | Adapter package initializer. |
+| `src/vulnagentx/adapters/sandbox_adapter.py` | Sandboxed subprocess executor with timeout/no-shell constraints for verification. |
+| `src/vulnagentx/adapters/semgrep_adapter.py` | Semgrep CLI adapter (optional). |
+| `src/vulnagentx/adapters/treesitter_adapter.py` | Tree-sitter adapter with AST extraction + fallback heuristics. |
+| `src/vulnagentx/adapters/llm/__init__.py` | LLM adapter exports. |
+| `src/vulnagentx/adapters/llm/base.py` | LLM adapter protocol interface. |
+| `src/vulnagentx/adapters/llm/mock_adapter.py` | Deterministic mock LLM for offline tests. |
+| `src/vulnagentx/adapters/llm/openai_adapter.py` | OpenAI SDK adapter implementation. |
+| `src/vulnagentx/adapters/llm/local_adapter.py` | Local model adapter (Ollama HTTP API). |
+| `src/vulnagentx/adapters/llm/factory.py` | Provider-based adapter factory with mock fallback. |
+| `src/vulnagentx/retrieval/repo_graph.py` | Repository code-graph indexing and neighbor retrieval. |
+| `src/vulnagentx/datasets/base.py` | Shared dataset sample model and JSONL/CSV loaders. |
+| `src/vulnagentx/datasets/devign.py` | Devign loader entrypoint. |
+| `src/vulnagentx/datasets/bigvul.py` | Big-Vul loader entrypoint. |
+| `src/vulnagentx/datasets/primevul.py` | PrimeVul loader entrypoint. |
+| `src/vulnagentx/datasets/jit.py` | JIT loader entrypoint. |
+| `src/vulnagentx/eval/detection_metrics.py` | Detection metrics (Precision/Recall/F1/Accuracy). |
+| `src/vulnagentx/eval/localization_metrics.py` | Localization metrics (Top-1/Top-3/MRR). |
+| `src/vulnagentx/eval/efficiency_metrics.py` | Efficiency metrics (avg runtime/P95/findings). |
+| `src/vulnagentx/eval/ablations.py` | Ablation execution logic across workflow variants. |
+| `src/vulnagentx/utils/config.py` | Central workflow configuration (env/CLI/API toggles). |
 
-### 测试文件（`tests`）
+### Test Files (`tests`)
 
-| 文件 | 用途 |
+| File | Purpose |
 |---|---|
-| `tests/test_agents.py` | 单测：各 Agent 结构化输出与反证逻辑。 |
-| `tests/test_end_to_end.py` | 端到端测试：从输入仓库到最终 findings 的主流程。 |
-| `tests/test_research_modules.py` | 新增模块测试：Tree-sitter 图构建、verification 执行链路、评测指标。 |
+| `tests/test_agents.py` | Unit tests for agent structured outputs and sceptic behavior. |
+| `tests/test_end_to_end.py` | End-to-end workflow test from input repo to final findings. |
+| `tests/test_research_modules.py` | Tests for Tree-sitter graphing, verification pipeline, and metrics modules. |
 
-## 本次已实现增强模块
+## Implemented Research Modules
 
-- 真实 LLM Adapter：`OpenAI` + 本地 `Ollama` + 自动工厂切换
-- 真实 Tree-sitter AST 与代码图：解析函数/导入/调用关系，支持邻居文件上下文扩展
-- 真实 Semgrep 规则集：内置规则文件并接入 screening 阶段
-- verification sandbox 执行链路：任务规划、受限执行、超时控制、结构化结果回写
-- 数据集评测与消融：数据加载器、指标模块、实验与消融脚本
+- Real LLM adapters: OpenAI + local Ollama + provider-based factory fallback
+- Real Tree-sitter AST and code graph integration (with graceful fallback mode)
+- Real Semgrep ruleset integration in screening
+- Verification sandbox execution chain with bounded subprocess tasks
+- Dataset loaders, evaluation metrics, and ablation scripts for experiments
